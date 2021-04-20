@@ -1,0 +1,106 @@
+
+  %% 
+  % Filter for EPSP and spikes
+  disp ('Correcting Vm to spike threshold...')
+
+s(5).EPSP.filtered    = filtfilt (EPSPfil.Numerator,1, s(5).signals);
+s(5).EPSP.derivative  = diff(s(5).EPSP.filtered);
+s(5).EPSP.derivative  = [s(5).EPSP.derivative; s(5).EPSP.derivative(1)];
+
+threshold_spike       = mean (s(5).EPSP.derivative) + 7*std (s(5).EPSP.derivative); 
+
+findpeaks(s(5).EPSP.derivative,'MinPeakDistance',100, 'MinPeakHeight', threshold_spike); %find spike peaks
+%% 
+
+
+[s(5).EPSP.spike_pks,s(5).EPSP.spike_locs,...
+s(5).EPSP.spike_widths, s(5).EPSP.spike_proms]...
+                            = findpeaks(s(5).EPSP.derivative,'MinPeakDistance',100, 'MinPeakHeight', threshold_spike); %find spike peaks
+
+s(5).EPSP.spike_locs (:,2) = s(5).EPSP.spike_locs/Fs;
+                        
+s(5).EPSP.spike_threshold_locs = s(5).EPSP.spike_locs (:,1) - round (s(5).EPSP.spike_widths);
+s(5).EPSP.spike_threshold_vals = s(5).signals (s(5).EPSP.spike_threshold_locs);
+s(5).EPSP.correction_val       = -57-mean(s(5).EPSP.spike_threshold_vals);
+s(5).signals                   = s(5).signals + s(5).EPSP.correction_val;
+
+for k = 1:length (s(5).EPSP.spike_locs)
+    idx  = find(time == s(5).EPSP.spike_locs(k,1)); %peak of gamma
+ if idx>500 & idx<length(time)-500
+   s(5).EPSP.spikewaves(1:1001,k) = s(5).signals(idx-500:idx+500);
+ end
+end
+
+disp ('Done.')
+%% 
+  disp('Filtering for spike/EPSP...') 
+
+  threshold                   = mean (s(5).EPSP.derivative) + (std (s(5).EPSP.derivative))/2; 
+
+  findpeaks (s(5).EPSP.derivative,...
+                              'MinPeakDistance', 150, 'MinPeakHeight', threshold*2.5);
+                          %% 
+                          
+[s(5).EPSP.pks,s(5).EPSP.locs,...
+s(5).EPSP.widths, s(5).EPSP.proms]...
+                            = findpeaks (s(5).EPSP.derivative,...
+                              'MinPeakDistance', 150, 'MinPeakHeight', threshold*1.5); %find EPSP peaks
+
+s(5).EPSP.EPSP_pks    = setdiff(s(5).EPSP.pks,s(5).EPSP.spike_pks(:,1)); % This returns the data in locs_EPSP that is not in locs_spike: i.e removes spike times
+s(5).EPSP.EPSP_locs   = setdiff(s(5).EPSP.locs,s(5).EPSP.spike_locs(:,1));
+s(5).EPSP.EPSP_locs (:,2) = s(5).EPSP.EPSP_locs/Fs;
+s(5).EPSP.EPSP_widths = setdiff(s(5).EPSP.widths,s(5).EPSP.spike_widths(:,1));
+s(5).EPSP.EPSP_proms  = setdiff(s(5).EPSP.proms,s(5).EPSP.spike_proms(:,1));
+
+try
+for k = 1:size (s(5).EPSP.spikewaves,2)
+[s(5).EPSP.spike_pks1(k),s(5).EPSP.spike_locs1(k),...
+s(5).EPSP.spike_widths1(k), s(5).EPSP.spike_proms1(k)]...
+     = findpeaks(s(5).EPSP.spikewaves (450:600,k),'MinPeakDistance',100, 'MinPeakHeight', -40); %find spike peaks
+end
+s(5).EPSP.spike_locs1 =s(5).EPSP.spike_locs1+450;
+
+
+    
+
+for k = 1:length (s(5).EPSP.EPSP_locs)
+    idx2 = find(time == s(5).EPSP.EPSP_locs(k,1));
+ if idx2>500 & idx2<length(time)-500 
+   s(5).EPSP.EPSPwaves(1:501,k)=s(5).signals (idx2-250:idx2+250);
+ end
+end
+catch
+end
+
+
+try
+
+s(5).EPSP.AHPcell ={};
+for k = 1:size (s(5).EPSP.spikewaves,2)
+    [s(5).EPSP.AHPcell{1,k}...
+        s(5).EPSP.AHPcell{2,k}...
+          s(5).EPSP.AHPcell{3,k}...
+            s(5).EPSP.AHPcell{4,k}]...
+            =findpeaks ((-s(5).EPSP.spikewaves (500:600,k)),...
+               'MinPeakDistance', 90, ...
+                   'MinPeakProminence', 0.5,...
+                   'Npeaks', 1);
+end
+
+for k = 1:size (s(5).EPSP.spikewaves,2)
+a(k)=isempty (s(5).EPSP.AHPcell{4,k});
+end
+b=find (a==0);
+
+s(5).EPSP.AHP.prom = cell2mat (s(5).EPSP.AHPcell(4,b));
+s(5).EPSP.AHP.width = cell2mat (s(5).EPSP.AHPcell(3,b));
+s(5).EPSP.AHP.meanprom = mean (s(5).EPSP.AHP.prom);
+s(5).EPSP.AHP.meanprom(2,:) = std (s(5).EPSP.AHP.prom);
+s(5).EPSP.AHP.meanwidth = mean (s(5).EPSP.AHP.width);
+s(5).EPSP.AHP.meanwidth(2,:) = std (s(5).EPSP.AHP.width);
+catch
+end
+clear k idx idx2 threshold
+disp('Done.')
+%% 
+dsplot (s(3).signals)
